@@ -1,0 +1,37 @@
+---
+title: "Overview of Scheduled Unit Tests of Jasp Modules"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{actions-dashboard}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, include=FALSE}
+library(plotly)
+library(actionsDashboard)
+repos <- get_jasp_repos()
+repos <- repos#[1:5] # for now
+ignored <- capture.output(tib_individual    <- get_action_data_as_tib(repos))
+tib_collapsed     <- get_collapsed_tib(tib_individual)
+repos_successful  <- repos[repos %in% tib_individual$repo]
+p_collapsed_runs  <- plot_collapsed_runs(repos_successful, tib_collapsed)
+p_individual_runs <- plot_individual_runs(repos_successful, tib_individual)
+```
+
+## Aggregated runs per module
+```{r overview _plot, fig.align='center', out.width="100%", echo=FALSE}
+p_collapsed_runs
+```
+
+## Individual runs
+```{r individual_plot, fig.align='center', out.width="100%", echo=FALSE}
+p_individual_runs
+```

@@ -1,16 +1,13 @@
 # TODO:
 
-# - [ ] github action
+# - [ ] create webpage with github action
+# - [ ] do not use cache on github actions!
 # - [ ] better formatting of p_individual_runs
-# - [ ] urls don't add up, they are correct in the df though - looks like the y-axis labels are messed up
+# - [ ] add some tries so things are allowed to fail
 
-# rm(list = ls())
-# library(gh)
-# # library(progress)
-# library(dplyr)
-# library(plotly)
-# library(htmlwidgets)
-# library(htmltools)
+# DONE:
+# - [x] urls don't add up, they are correct in the df though - looks like the y-axis labels are messed up
+
 
 get_action_results <- function(repo, workflow_id = "unittests.yml", owner = "jasp-stats", branch = "master", event = c("schedule"),
                                created = paste(">=", Sys.Date() - 14)) {
@@ -45,6 +42,7 @@ get_jobs_results <- function(action_results) {
   return(results)
 }
 
+#' @export
 get_jasp_repos <- function() {
 
   repos_results <- gh::gh("/orgs/{org}/repos?per_page={per_page}", org = "jasp-stats", per_page = 100)
@@ -53,7 +51,9 @@ get_jasp_repos <- function() {
   repos <- repos[grepl("jasp[A-Z]", repos)]
 
   # some custom exclusions
-  repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults"))
+  repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults",
+                            # jaspVisualModeling has no unit tests
+                            "jaspBase", "jaspGraphs", "jaspVisualModeling", "jaspTestModule"))
 
   # sort: first the common modules, then the rest alphabetically
   common_modules <- c("jaspDescriptives", "jaspTTests", "jaspAnova", "jaspMixedModels", "jaspRegression", "jaspFrequencies", "jaspFactor")
@@ -64,17 +64,52 @@ get_jasp_repos <- function() {
   return(repos)
 }
 
-get_action_data_as_tib <- function(repos) {
-  raw_results <- setNames(vector("list", length(repos)), repos)
+#' @export
+get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identical(.Platform$OS.type, "unix")) {
+  # raw_results <- setNames(vector("list", length(repos)), repos)
   tib_results <- tibble::tibble()
+
+  cache_root <- file.path("~", ".cache", "R", "jaspActionsDashboard-cache")
+  if (enable_cache) {
+    if (!dir.exists(cache_root))
+      dir.create(cache_root, recursive = TRUE)
+    cache_root <- normalizePath(cache_root)
+  }
+
   for (i in seq_along(repos)) {
 
     repo <- repos[i]
     cat(sprintf("[%02d/%02d] Making API calls for module %s...\n", i, length(repos), repo))
-    action_results <- get_action_results(repo)
-    job_results   <- get_jobs_results(action_results)
 
-    raw_results[[repo]] <- list(action_results = action_results, job_results = job_results)
+    cache_file <- file.path(cache_root, paste0(repo, "-", Sys.Date(), ".rds"))
+    reloaded_from_cache <- FALSE
+    if (enable_cache && !force && file.exists(cache_file)) {
+
+      cat(sprintf("[%02d/%02d] Loaded API calls for module %s from the cache at %s\n", i, length(repos), repo, cache_file))
+      temp <- readRDS(cache_file)
+      action_results <- temp[["action_results"]]
+      job_results    <- temp[["job_results"]]
+      reloaded_from_cache <- TRUE
+
+    } else {
+
+      e <- try({
+        action_results <- get_action_results(repo)
+        job_results    <- get_jobs_results(action_results)
+      }, silent = TRUE)
+
+      if (inherits(e, "try-error")) {
+        cat(sprintf("[%02d/%02d] Module %s failed with message:\n%s\n", i, length(repos), repo, e))
+        next
+      }
+    }
+
+    if (enable_cache && !reloaded_from_cache) {
+      cat(sprintf("[%02d/%02d] Saved API calls for module %s to the cache at %s\n", i, length(repos), repo, cache_file))
+      saveRDS(list(action_results = action_results, job_results = job_results), file = cache_file)
+    }
+
+    # raw_results[[repo]] <- list(action_results = action_results, job_results = job_results)
     no_results <- Reduce(\(y, x) y + length(x[["names"]]), job_results, init = 0L)
     repo_result_df <- tibble::tibble(
       repo     = rep(repo, no_results),
@@ -95,10 +130,21 @@ get_action_data_as_tib <- function(repos) {
       repo_name_int = interaction(repo, name_clean, sep = " ", lex.order = TRUE)
     )
 
+  oses      <- unique(gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\1", tib_results$name))
+  rversions <- unique(gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\2", tib_results$name))
+  oses <- c("windows", "macOS", "ubuntu")
+
+  all_combinations <- expand.grid(oses, sort(package_version(rversions), decreasing = TRUE))
+  level_order <- paste0(all_combinations[[1]], " R-", as.character(all_combinations[[2]]))
+
+  level_order <- intersect(level_order, tib_results$name_clean)
+  tib_results$name_clean <- factor(tib_results$name_clean, levels = rev(level_order))
+
   return(tib_results)
 
 }
 
+#' @export
 plot_individual_runs <- function(repos, tib) {
 
   js <- "
@@ -114,9 +160,12 @@ plot_individual_runs <- function(repos, tib) {
 
   colors_individual_runs <- setNames(c("red", "green"), c(FALSE, TRUE))
 
+  abs_sizes <- tib |> dplyr::group_by(repo) |> dplyr::summarise(n = dplyr::n(), .groups = "drop")
+  abs_sizes <- abs_sizes[["n"]]
+  rel_sizes <- abs_sizes / sum(abs_sizes)
+
   p_individual_runs <- lapply(repos, \(repository) {
-    d <- tib |> dplyr::filter(repo == repository)
-    d$repo_name_int <- droplevels(d$repo_name_int)
+    d <- dplyr::filter(tib, repo == repository)
     plotly::plot_ly(
       d,
       x = ~date,
@@ -126,68 +175,32 @@ plot_individual_runs <- function(repos, tib) {
       color = ~result,
       colors = colors_individual_runs,
       size = 5,
-      customdata = d$url,#[as.integer(d$repo_name_int)],
+      customdata = d$url,
       type = "scatter",
       mode = "markers",
-      # autosize = TRUE,
-      height = vctrs::vec_unique_count(d$name_clean) * length(repos) * 200 / 9
-      # height = vctrs::vec_unique_count(d$name_clean) * 200 / 9
+      height = vctrs::vec_unique_count(d$name_clean) * length(repos) * 450 / 9
     ) |>
-      # add_markers(
-      #   # x = ~as.integer(date),
-      #   x = ~date,
-      #   y = ~repo_name_int,
-      #   symbol = ~result,
-      #   symbols = c("x-dot", "circle-open"),
-      #   color = ~result,
-      #   colors = colors_individual_runs,
-      #   size = 5
-      # ) |>
       plotly::layout(
         xaxis = list(
           title      = "",
-          # type       = "category",
-          # ticktext   = strftime(unique(df_results2$date), "%a\n%d/%m"),
-          # tickvals   = unique(as.integer(df_results2$date))
           type       = "date",
           tickformat = "%a\n%d/%m",
           tickvals   = unique(tib$date),
           ticklabelmode = "period"
         ),
         yaxis = list(
-          title    = repository#,
-          # ticktext = sort(unique(d$name_clean), decreasing = FALSE),
-          # tickvals = 0:length(unique(d$name_clean))
-          # tickvals = unique(as.integer(d$repo_name_int)) - 1L,
-          # tickmode = "array"
+          title    = repository
         ),
         showlegend = FALSE
-      ) #|> htmlwidgets::onRender(jsCode = js)
+      )
   }) |>
-    plotly::subplot(nrows = length(repos), shareX = TRUE, titleY = TRUE) |>
+    plotly::subplot(nrows = length(repos), margin = 0.002, shareX = TRUE, titleY = TRUE) |>
     htmlwidgets::onRender(jsCode = js)
-
-  p_individual_runs
-  plotly::plot_ly(
-      d,
-      x = ~date,
-      y = ~repo_name_int,
-      symbol = ~result,
-      symbols = c("x-dot", "circle-open"),
-      color = ~result,
-      colors = colors_individual_runs,
-      size = 5,
-      customdata = d$url,
-      type = "scatter",
-      mode = "markers",
-      # autosize = TRUE,
-      height = vctrs::vec_unique_count(d$name_clean) * length(repos) * 200 / 9
-      # height = vctrs::vec_unique_count(d$name_clean) * 200 / 9
-    ) |> htmlwidgets::onRender(jsCode = js)
 
   return(p_individual_runs)
 }
 
+#' @export
 plot_collapsed_runs <- function(repos, tib) {
 
   # TODO: should be colorblind friendly!
@@ -204,7 +217,7 @@ plot_collapsed_runs <- function(repos, tib) {
   col_fact <- setNames(col_values, 0:max_jobs)
 
   # TODO: onHover should show which runs failed!
-  p_collapsed_runs <- plotly::plot_ly(tib) |>
+  p_collapsed_runs <- plotly::plot_ly(tib, height = 30 * vctrs::vec_unique_count(tib$repo)) |>
     plotly::add_markers(
       x = ~date,
       y = ~repo,
@@ -226,13 +239,9 @@ plot_collapsed_runs <- function(repos, tib) {
   return(p_collapsed_runs)
 }
 
-collapse_tib
-
-repos <- get_jasp_repos()
-repos <- repos[1:5]
-tib <- get_action_data_as_tib(repos)
-
-tib_collapsed <- tib |>
+#' @export
+get_collapsed_tib <- function(tib) {
+  tib |>
   dplyr::group_by(repo, date) |>
   dplyr::summarise(
     sum_result = sum(result),
@@ -242,169 +251,166 @@ tib_collapsed <- tib |>
   ) |>
   dplyr::ungroup() |>
   dplyr::mutate(date = as.Date(date))
-
-p_collapsed_runs  <- plot_collapsed_runs(repos, tib_collapsed)
-p_individual_runs <- plot_individual_runs(repos, tib)
-
-gh::gh_rate_limit()
-
-# for testing
-repos <- repos[1:5] #c("jaspDescriptives", "jaspTTests", )
-raw_results <- setNames(vector("list", length(repos)), repos)
-df_results <- data.frame()
-for (i in seq_along(repos)) {
-
-  repo <- repos[i]
-  cat(sprintf("[%02d/%02d] Making API calls for module %s...\n", i, length(repos), repo))
-  action_results <- get_action_results(repo)
-  job_results   <- get_jobs_results(action_results)
-
-  raw_results[[repo]] <- list(action_results = action_results, job_results = job_results)
-  no_results <- Reduce(\(y, x) y + length(x[["names"]]), job_results, init = 0L)
-  repo_result_df <- data.frame(
-    repo   = rep(repo, no_results),
-    name   = unlist(lapply(job_results, `[[`, "names")),
-    date   = Reduce(c, lapply(job_results, \(x) rep(x[["date"]], length(x[["names"]])))),
-    result = unlist(lapply(job_results, `[[`, "success")),
-    url    = unlist(lapply(job_results, `[[`, "urls"))
-  )
-  df_results <- rbind(df_results, repo_result_df)
 }
 
-# df_results$repo <- factor(df_results$repo, levels = rev(repos))
 
-df_results2 <- df_results |>
-  mutate(
-    # determines the order for the plots
-    repo          = factor(repo, levels = rev(repos)),
-    name_clean    = gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\1 R-\\2", name),
-    date          = as.Date(date),
-    repo_name_int = interaction(repo, name_clean, sep = " ", lex.order = TRUE)
-  )
-
-js <- "
-function(el, x) {
-  el.on('plotly_click', function(d) {
-    console.log(d)
-    var point = d.points[0];
-    console.log(point)
-    var url = point.data.customdata[point.pointIndex];
-    window.open(url);
-  });
-}"
-
-colors_individual_runs <- setNames(c("red", "green"), c(FALSE, TRUE))
-
-p_individual_runs <- lapply(repos, \(repository) {
-  d <- df_results2 |> filter(repo == repository)
-  d$repo_name_int <- droplevels(d$repo_name_int)
-  plot_ly(
-    d,
-    x = ~date,
-    y = ~repo_name_int,
-    symbol = ~result,
-    symbols = c("x-dot", "circle-open"),
-    color = ~result,
-    colors = colors_individual_runs,
-    size = 5,
-    customdata = d$url,
-    type = "scatter",
-    mode = "markers",
-    # autosize = TRUE,
-    height = vctrs::vec_unique_count(d$name_clean) * length(repos) * 200 / 9
-    # height = vctrs::vec_unique_count(d$name_clean) * 200 / 9
-  ) |>
-    # add_markers(
-    #   # x = ~as.integer(date),
-    #   x = ~date,
-    #   y = ~repo_name_int,
-    #   symbol = ~result,
-    #   symbols = c("x-dot", "circle-open"),
-    #   color = ~result,
-    #   colors = colors_individual_runs,
-    #   size = 5
-    # ) |>
-    layout(
-      xaxis = list(
-        title      = "",
-        # type       = "category",
-        # ticktext   = strftime(unique(df_results2$date), "%a\n%d/%m"),
-        # tickvals   = unique(as.integer(df_results2$date))
-        type       = "date",
-        tickformat = "%a\n%d/%m",
-        tickvals   = unique(df_results2$date),
-        ticklabelmode = "period"
-      ),
-      yaxis = list(
-        title    = repository,
-        ticktext = unique(d$name_clean),
-        tickvals = unique(as.integer(d$repo_name_int)) - 1L,
-        tickmode = "array"
-      ),
-      showlegend = FALSE
-    )# |> htmlwidgets::onRender(jsCode = js)
-}) |>
-  subplot(nrows = length(repos), shareX = TRUE, titleY = TRUE) |>
-  htmlwidgets::onRender(jsCode = js)
-
-p_individual_runs
-# https://plotly.com/r/time-series/ the buttons are pretty cool
-
-# p_individual_runs$x$layout$xaxis
-# for (i in 2:length(repos)) {
-#   xaxis <- p_individual_runs$x$layout$xaxis
-#   xaxis$anchor <- paste0("y", i - 1)
-#   p_individual_runs$x$layout[[paste0("xaxis", i)]] <- xaxis
+# # for testing
+# repos <- repos[1:5] #c("jaspDescriptives", "jaspTTests", )
+# raw_results <- setNames(vector("list", length(repos)), repos)
+# df_results <- data.frame()
+# for (i in seq_along(repos)) {
+#
+#   repo <- repos[i]
+#   cat(sprintf("[%02d/%02d] Making API calls for module %s...\n", i, length(repos), repo))
+#   action_results <- get_action_results(repo)
+#   job_results   <- get_jobs_results(action_results)
+#
+#   raw_results[[repo]] <- list(action_results = action_results, job_results = job_results)
+#   no_results <- Reduce(\(y, x) y + length(x[["names"]]), job_results, init = 0L)
+#   repo_result_df <- data.frame(
+#     repo   = rep(repo, no_results),
+#     name   = unlist(lapply(job_results, `[[`, "names")),
+#     date   = Reduce(c, lapply(job_results, \(x) rep(x[["date"]], length(x[["names"]])))),
+#     result = unlist(lapply(job_results, `[[`, "success")),
+#     url    = unlist(lapply(job_results, `[[`, "urls"))
+#   )
+#   df_results <- rbind(df_results, repo_result_df)
 # }
-
-df_results_collaped <- df_results2 |>
-  group_by(repo, date) |>
-  summarise(
-    sum_result = sum(result),
-    n_njobs    = length(result),
-    url        = url[1]
-  ) |>
-  ungroup() |>
-  mutate(date = as.Date(date))
-
-cols <- scales::div_gradient_pal(
-  low = "red",
-  mid = "orange",
-  high = "green",
-  space = "Lab"
-)
-
-max_jobs <- max(df_results_collaped$n_njobs)
-col_values <- cols(0:max_jobs / max_jobs)
-# scales::show_col(col_values)
-col_fact <- setNames(col_values, 0:max_jobs)
-
-p_collapsed_runs <- plot_ly(df_results_collaped) |>
-  add_markers(
-    x = ~date,
-    y = ~repo,
-    color = ~factor(sum_result),
-    colors = col_fact,
-    size = 5
-  ) |>
-  layout(
-    xaxis = list(
-      title      = "",
-      type       = 'date',
-      tickformat = "%a\n%d/%m",
-      tickvals   = unique(df_results_collaped$date)
-    ),
-    yaxis = list(
-      title    = ""
-    )
-  )
-
-f <- tempfile(fileext = ".html")
-save_html(tagList(
-  div(p_collapsed_runs),
-  div(p_individual_runs)
-), file = f)
-system2("xdg-open", f)
+#
+# # df_results$repo <- factor(df_results$repo, levels = rev(repos))
+#
+# df_results2 <- df_results |>
+#   mutate(
+#     # determines the order for the plots
+#     repo          = factor(repo, levels = rev(repos)),
+#     name_clean    = gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\1 R-\\2", name),
+#     date          = as.Date(date),
+#     repo_name_int = interaction(repo, name_clean, sep = " ", lex.order = TRUE)
+#   )
+#
+# js <- "
+# function(el, x) {
+#   el.on('plotly_click', function(d) {
+#     console.log(d)
+#     var point = d.points[0];
+#     console.log(point)
+#     var url = point.data.customdata[point.pointIndex];
+#     window.open(url);
+#   });
+# }"
+#
+# colors_individual_runs <- setNames(c("red", "green"), c(FALSE, TRUE))
+#
+# p_individual_runs <- lapply(repos, \(repository) {
+#   d <- df_results2 |> filter(repo == repository)
+#   d$repo_name_int <- droplevels(d$repo_name_int)
+#   plot_ly(
+#     d,
+#     x = ~date,
+#     y = ~repo_name_int,
+#     symbol = ~result,
+#     symbols = c("x-dot", "circle-open"),
+#     color = ~result,
+#     colors = colors_individual_runs,
+#     size = 5,
+#     customdata = d$url,
+#     type = "scatter",
+#     mode = "markers",
+#     # autosize = TRUE,
+#     height = vctrs::vec_unique_count(d$name_clean) * length(repos) * 200 / 9
+#     # height = vctrs::vec_unique_count(d$name_clean) * 200 / 9
+#   ) |>
+#     # add_markers(
+#     #   # x = ~as.integer(date),
+#     #   x = ~date,
+#     #   y = ~repo_name_int,
+#     #   symbol = ~result,
+#     #   symbols = c("x-dot", "circle-open"),
+#     #   color = ~result,
+#     #   colors = colors_individual_runs,
+#     #   size = 5
+#     # ) |>
+#     layout(
+#       xaxis = list(
+#         title      = "",
+#         # type       = "category",
+#         # ticktext   = strftime(unique(df_results2$date), "%a\n%d/%m"),
+#         # tickvals   = unique(as.integer(df_results2$date))
+#         type       = "date",
+#         tickformat = "%a\n%d/%m",
+#         tickvals   = unique(df_results2$date),
+#         ticklabelmode = "period"
+#       ),
+#       yaxis = list(
+#         title    = repository,
+#         ticktext = unique(d$name_clean),
+#         tickvals = unique(as.integer(d$repo_name_int)) - 1L,
+#         tickmode = "array"
+#       ),
+#       showlegend = FALSE
+#     )# |> htmlwidgets::onRender(jsCode = js)
+# }) |>
+#   subplot(nrows = length(repos), shareX = TRUE, titleY = TRUE) |>
+#   htmlwidgets::onRender(jsCode = js)
+#
+# p_individual_runs
+# # https://plotly.com/r/time-series/ the buttons are pretty cool
+#
+# # p_individual_runs$x$layout$xaxis
+# # for (i in 2:length(repos)) {
+# #   xaxis <- p_individual_runs$x$layout$xaxis
+# #   xaxis$anchor <- paste0("y", i - 1)
+# #   p_individual_runs$x$layout[[paste0("xaxis", i)]] <- xaxis
+# # }
+#
+# df_results_collaped <- df_results2 |>
+#   group_by(repo, date) |>
+#   summarise(
+#     sum_result = sum(result),
+#     n_njobs    = length(result),
+#     url        = url[1]
+#   ) |>
+#   ungroup() |>
+#   mutate(date = as.Date(date))
+#
+# cols <- scales::div_gradient_pal(
+#   low = "red",
+#   mid = "orange",
+#   high = "green",
+#   space = "Lab"
+# )
+#
+# max_jobs <- max(df_results_collaped$n_njobs)
+# col_values <- cols(0:max_jobs / max_jobs)
+# # scales::show_col(col_values)
+# col_fact <- setNames(col_values, 0:max_jobs)
+#
+# p_collapsed_runs <- plot_ly(df_results_collaped) |>
+#   add_markers(
+#     x = ~date,
+#     y = ~repo,
+#     color = ~factor(sum_result),
+#     colors = col_fact,
+#     size = 5
+#   ) |>
+#   layout(
+#     xaxis = list(
+#       title      = "",
+#       type       = 'date',
+#       tickformat = "%a\n%d/%m",
+#       tickvals   = unique(df_results_collaped$date)
+#     ),
+#     yaxis = list(
+#       title    = ""
+#     )
+#   )
+#
+# f <- tempfile(fileext = ".html")
+# save_html(tagList(
+#   div(p_collapsed_runs),
+#   div(p_individual_runs)
+# ), file = f)
+# system2("xdg-open", f)
 
 
 #
