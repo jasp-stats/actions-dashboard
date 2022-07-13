@@ -26,8 +26,8 @@ jobs:
           cache-version: 2
           extra-packages: any::rmarkdown
 
-      - name: Render Book
-        run: Rscript -e 'rmarkdown::rmarkdown::render("vignettes/actions-dashboard.Rmd", rmarkdown::html_vignette(), "index.html")'
+      - name: Render Dashboard
+        run: Rscript -e 'rmarkdown::render("vignettes/actions-dashboard.Rmd", rmarkdown::html_vignette(), "index.html")'
 
       - name: Push to GitHub Pages branch
         run: |
