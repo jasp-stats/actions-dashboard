@@ -18,8 +18,8 @@ knitr::opts_chunk$set(
 library(plotly)
 library(actionsDashboard)
 repos <- get_jasp_repos()
-repos <- repos#[1:5] # for now
-ignored <- capture.output(tib_individual    <- get_action_data_as_tib(repos))
+repos <- repos
+messages <- capture.output(tib_individual    <- get_action_data_as_tib(repos))
 tib_collapsed     <- get_collapsed_tib(tib_individual)
 repos_successful  <- repos[repos %in% tib_individual$repo]
 p_collapsed_runs  <- plot_collapsed_runs(repos_successful, tib_collapsed)
@@ -32,6 +32,15 @@ p_collapsed_runs
 ```
 
 ## Individual runs
+Clicking on a dot opens the run log.
 ```{r individual_plot, fig.align='center', out.width="100%", echo=FALSE}
 p_individual_runs
+```
+
+## Debug info
+```{r}
+print(messages)
+print(repos_successful)
+head(tib_individual)
+head(tib_collapsed)
 ```

@@ -69,6 +69,11 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
 
   tib_results <- tibble::tibble()
 
+  if (identical(getOption("CI", "false"), "true")) {
+    cat("Running on CI, disabling cache")
+    enable_cache <- FALSE
+  }
+
   cache_root <- file.path("~", ".cache", "R", "jaspActionsDashboard-cache")
   if (enable_cache) {
     if (!dir.exists(cache_root))
