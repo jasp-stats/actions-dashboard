@@ -28,8 +28,8 @@ jobs:
 
       - name: Render Dashboard
         run: Rscript -e 'rmarkdown::render("vignettes/actions-dashboard.Rmd", rmarkdown::html_vignette(), "index.html")'
-          with:
-            GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push to GitHub Pages branch
         run: |
