@@ -68,8 +68,8 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
 
   tib_results <- tibble::tibble()
 
-  if (identical(getOption("CI", "false"), "true")) {
-    cat("Running on CI, disabling cache")
+  if (identical(Sys.getenv("CI", "false"), "true")) {
+    cat("Running on CI, disabling cache\n")
     enable_cache <- FALSE
   }
 
@@ -167,6 +167,9 @@ plot_individual_runs <- function(repos, tib) {
   abs_sizes <- abs_sizes[["n"]]
   rel_sizes <- abs_sizes / sum(abs_sizes)
 
+  date_ticks <- unique(tib$date)
+  date_range <- range(date_ticks) + c(-1L, 1L)
+
   p_individual_runs <- lapply(repos, \(repository) {
     d <- dplyr::filter(tib, repo == repository)
     plotly::plot_ly(
@@ -185,10 +188,11 @@ plot_individual_runs <- function(repos, tib) {
     ) |>
       plotly::layout(
         xaxis = list(
-          title      = "",
-          type       = "date",
-          tickformat = "%a\n%d/%m",
-          tickvals   = unique(tib$date),
+          title         = "",
+          type          = "date",
+          tickformat    = "%a\n%d/%m",
+          tickvals      = date_ticks,
+          range         = date_range,
           ticklabelmode = "period"
         ),
         yaxis = list(
@@ -197,7 +201,7 @@ plot_individual_runs <- function(repos, tib) {
         showlegend = FALSE
       )
   }) |>
-    plotly::subplot(nrows = length(repos), margin = 0.002, shareX = TRUE, titleY = TRUE) |>
+    plotly::subplot(nrows = length(repos), margin = 0.002, shareX = FALSE, titleY = TRUE) |>
     htmlwidgets::onRender(jsCode = js)
 
   return(p_individual_runs)
