@@ -41,8 +41,9 @@ jobs:
           mkdir temp
           git fetch origin gh-pages
           git worktree add --track -B gh-pages temp origin/gh-pages
+          # based on https://unix.stackexchange.com/a/77313
+          rm -rf  temp/* temp/.[!.]*
           # move new files to the docs folder
-          rm -rf temp/* temp/.*
           mv vignettes/index.html temp/index.html
           cd temp
           git status
