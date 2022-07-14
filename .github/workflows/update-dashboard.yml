@@ -3,7 +3,7 @@ on:
     branches:
       - main
   schedule:
-      - cron:  '21 12 * * 1-5'
+      - cron:  '13 05 * * 1-5'
 
 name: update-dashboard
 
