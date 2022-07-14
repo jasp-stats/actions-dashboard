@@ -15,14 +15,13 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup, include=FALSE}
-library(plotly)
 library(actionsDashboard)
 repos <- get_jasp_repos()
 repos <- repos
 messages <- capture.output(tib_individual    <- get_action_data_as_tib(repos))
 tib_collapsed     <- get_collapsed_tib(tib_individual)
+p_collapsed_runs  <- plot_collapsed_runs(tib_collapsed)
 repos_successful  <- repos[repos %in% tib_individual$repo]
-p_collapsed_runs  <- plot_collapsed_runs(repos_successful, tib_collapsed)
 p_individual_runs <- plot_individual_runs(repos_successful, tib_individual)
 ```
 
@@ -39,8 +38,10 @@ p_individual_runs
 
 ## Debug info
 ```{r}
+Sys.time()
+gh::gh_rate_limit()
 print(messages)
 print(repos_successful)
-head(tib_individual)
-head(tib_collapsed)
+repos_failed <- setdiff(repos, repos_successful)
+print(repos_failed)
 ```

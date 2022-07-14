@@ -52,8 +52,7 @@ get_jasp_repos <- function() {
 
   # some custom exclusions
   repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults",
-                            # jaspVisualModeling has no unit tests
-                            "jaspBase", "jaspGraphs", "jaspVisualModeling", "jaspTestModule"))
+                            "jaspBase", "jaspGraphs", "jaspTestModule", "jaspModuleTemplate"))
 
   # sort: first the common modules, then the rest alphabetically
   common_modules <- c("jaspDescriptives", "jaspTTests", "jaspAnova", "jaspMixedModels", "jaspRegression", "jaspFrequencies", "jaspFactor")
@@ -205,7 +204,7 @@ plot_individual_runs <- function(repos, tib) {
 }
 
 #' @export
-plot_collapsed_runs <- function(repos, tib) {
+plot_collapsed_runs <- function(tib) {
 
   # TODO: should be colorblind friendly!
   cols <- scales::div_gradient_pal(
@@ -215,20 +214,31 @@ plot_collapsed_runs <- function(repos, tib) {
     space = "Lab"
   )
 
-  max_jobs <- max(tib$n_njobs)
-  col_values <- cols(0:max_jobs / max_jobs)
+  # max_jobs <- max(tib$n_njobs)
+  # col_values <- cols(0:max_jobs / max_jobs)
+
+
   # scales::show_col(col_values)
-  col_fact <- stats::setNames(col_values, 0:max_jobs)
+  tib$percentage <- round(tib$sum_result / tib$n_njobs, 2)
+
+  unique_percentages <- sort(unique(tib$percentage))
+  n_unique <- length(unique_percentages) - 1L
+  col_values <- cols(unique_percentages)
+
+  tib$percentage <- tib$percentage * 100
+  col_fact <- stats::setNames(col_values, unique_percentages * 100)
 
   # TODO: onHover should show which runs failed!
-  p_collapsed_runs <- plotly::plot_ly(tib, height = 30 * vctrs::vec_unique_count(tib$repo)) |>
-    plotly::add_markers(
-      x = ~date,
-      y = ~repo,
-      color = ~factor(sum_result),
-      colors = col_fact,
-      size = 5
-    ) |>
+  p_collapsed_runs <- plotly::plot_ly(
+    tib,
+    x = ~date,
+    y = ~repo,
+    color = ~factor(percentage),
+    colors = col_fact,
+    size = 5,
+    type = "scatter",
+    mode = "markers",
+    height = 30 * vctrs::vec_unique_count(tib$repo)) |>
     plotly::layout(
       xaxis = list(
         title      = "",
