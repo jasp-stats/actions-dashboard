@@ -42,8 +42,13 @@ jobs:
           git fetch origin gh-pages
           git worktree add --track -B gh-pages temp origin/gh-pages
           # based on https://unix.stackexchange.com/a/77313
+          # temporarily move .git folder out of the way
+          mv temp/.git/ temp/../.git
+          # delete everything including hidden files
           rm -rf  temp/* temp/.[!.]*
-          # move new files to the docs folder
+          # put .git folder back
+          mv temp/../.git temp/.git/
+          # move new html file
           mv vignettes/index.html temp/index.html
           cd temp
           git status
