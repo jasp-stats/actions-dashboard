@@ -51,7 +51,13 @@ jobs:
           cd temp
           git status
           git add --all .
-          git commit -m "Built site for commit $GITHUB_SHA"
+          echo "GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = 'schedule' ]; then
+            message="Built site for commit ${GITHUB_SHA} from scheduled run at $(date)"
+          else
+            message="Built site for commit ${GITHUB_SHA}"
+          fi
+          git commit -m "${message}"
           git push --force origin HEAD:gh-pages
           cd ..
           git worktree remove temp
