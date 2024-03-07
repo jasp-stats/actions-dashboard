@@ -55,7 +55,8 @@ get_jasp_repos <- function() {
   # some custom exclusions
   repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults", "jaspCommon",
                             "jaspPredictiveAnalytics", "jaspQMLComponents",
-                            "jaspBase", "jaspGraphs", "jaspTestModule", "jaspModuleTemplate"))
+                            "jaspBase", "jaspGraphs", "jaspTestModule", "jaspModuleTemplate",
+                            "jaspCommonLib", "jaspModuleInstaller", "jaspQMLControlsPlugin"))
 
   # sort: first the common modules, then the rest alphabetically
   common_modules <- c("jaspDescriptives", "jaspTTests", "jaspAnova", "jaspMixedModels", "jaspRegression", "jaspFrequencies", "jaspFactor")
