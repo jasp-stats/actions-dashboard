@@ -12,7 +12,9 @@ htmltools::save_html(htmltools::tagList(
   htmltools::div(p_collapsed_runs),
   htmltools::div(p_individual_runs)
 ), file = f)
-system2("xdg-open", f)
+
+if (interactive())
+  system2("xdg-open", f)
 
 gh::gh_rate_limit()
 

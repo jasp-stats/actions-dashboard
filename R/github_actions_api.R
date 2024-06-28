@@ -56,7 +56,7 @@ get_jasp_repos <- function() {
   repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults", "jaspCommon",
                             "jaspPredictiveAnalytics", "jaspQMLComponents",
                             "jaspBase", "jaspGraphs", "jaspTestModule", "jaspModuleTemplate",
-                            "jaspCommonLib", "jaspModuleInstaller", "jaspQMLControlsPlugin"))
+                            "jaspCommonLib", "jaspModuleInstaller", "jaspQMLControlsPlugin", "jaspIrtStanModels"))
 
   # sort: first the common modules, then the rest alphabetically
   common_modules <- c("jaspDescriptives", "jaspTTests", "jaspAnova", "jaspMixedModels", "jaspRegression", "jaspFrequencies", "jaspFactor")
@@ -141,11 +141,48 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
   rversions <- unique(gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\2", tib_results$name))
   oses <- c("windows", "macOS", "ubuntu")
 
-  all_combinations <- expand.grid(oses, sort(package_version(rversions), decreasing = TRUE))
+  # rversions can have nonnumeric-values, e.g.,
+  non_numeric_versions <- grep(x = rversions, pattern = "^[[:digit:]]+", invert = TRUE)
+  if (length(non_numeric_versions) > 0) {
+
+    resolved_versions <- vapply(non_numeric_versions, \(v) {
+      tryCatch({
+        # this is based on the API of r-hub, see https://github.com/r-lib/actions/blob/fbafc3bc4ba114e72680c71e835c59b022606c46/setup-r/src/installer.ts#L750
+        jsonlite::fromJSON(paste0("https://api.r-hub.io/rversions/resolve/", rversions[v], "/windows"))[["version"]]
+      }, error = function(e) "failed to resolve")
+    }, FUN.VALUE = character(1L))
+
+  }
+
+  rversions2 <- rversions
+  rversions2[non_numeric_versions] <- resolved_versions
+  rversions_order <- order(package_version(rversions2), decreasing = TRUE)
+
+  # if we want to show "R-release (4.4.1)
+  # rversions3 <- rversions
+  # rversions3[non_numeric_versions] <- paste0(rversions[non_numeric_versions], " (", resolved_versions, ")")
+
+  all_combinations <- expand.grid(oses, rversions2[rversions_order])
+
   level_order <- paste0(all_combinations[[1]], " R-", as.character(all_combinations[[2]]))
 
-  level_order <- intersect(level_order, tib_results$name_clean)
-  tib_results$name_clean <- factor(tib_results$name_clean, levels = rev(level_order))
+  if (length(non_numeric_versions) > 0) {
+
+    name_clean <- tib_results$name_clean
+    for (idx in non_numeric_versions) {
+      idx2 <- endsWith(name_clean, rversions[idx])
+      name_clean[idx2] <- gsub(paste0(rversions[idx], "$"), rversions2[idx], name_clean[idx2])
+    }
+
+    level_order <- intersect(level_order, name_clean)
+    tib_results$name_clean <- factor(name_clean, levels = rev(level_order))
+  } else {
+
+    level_order <- intersect(level_order, tib_results$name_clean)
+    tib_results$name_clean <- factor(tib_results$name_clean, levels = rev(level_order))
+
+  }
+
 
   return(tib_results)
 
