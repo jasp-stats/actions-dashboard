@@ -12,7 +12,7 @@
 
 
 get_action_results <- function(repo, workflow_id = "unittests.yml", owner = "jasp-stats", branch = "master", event = c("schedule"),
-                               created = paste(">=", Sys.Date() - 14)) {
+                               created = paste(">", Sys.Date() - 15)) {
 
   results <- gh::gh(
     "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs?branch={branch}&event={event}&created={created}",
@@ -53,7 +53,7 @@ get_jasp_repos <- function() {
   repos <- repos[grepl("jasp[A-Z]", repos)]
 
   # some custom exclusions
-  repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults", "jaspCommon", "jaspModuleBundleManager", "jaspModuleTools",
+  repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults", "jaspCommon", "jaspModuleBundleManager", "jaspModuleTools", "jasp-desktop",
                             "jaspPredictiveAnalytics", "jaspQMLComponents",
                             "jaspBase", "jaspGraphs", "jaspTestModule", "jaspModuleTemplate",
                             "jaspCommonLib", "jaspModuleInstaller", "jaspQMLControlsPlugin", "jaspIrtStanModels"))
@@ -128,8 +128,6 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
     tib_results <- rbind(tib_results, repo_result_df)
   }
 
-  print("after loop")
-  print(head(tib_results))
   tib_results <- tib_results |>
     dplyr::mutate(
       # determines the order for the plots
