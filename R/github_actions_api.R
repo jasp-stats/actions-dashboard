@@ -128,6 +128,8 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
     tib_results <- rbind(tib_results, repo_result_df)
   }
 
+  print("after loop")
+  print(head(tib_results))
   tib_results <- tib_results |>
     dplyr::mutate(
       # determines the order for the plots

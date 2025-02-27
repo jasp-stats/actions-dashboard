@@ -17,9 +17,9 @@ knitr::opts_chunk$set(
 ```{r setup, include=FALSE}
 library(actionsDashboard)
 repos <- get_jasp_repos()
-messages <- capture.output({
+# messages <- capture.output({
   tib_individual  <- try(get_action_data_as_tib(repos))
-})
+# })
 if (inherits(tib_individual, "try-error")) {
   print(messages)
   stop("Failed to get action data", domain = NA)
@@ -45,7 +45,7 @@ p_individual_runs
 ```{r}
 Sys.time()
 gh::gh_rate_limit()
-print(messages)
+# print(messages)
 print(repos_successful)
 repos_failed <- setdiff(repos, repos_successful)
 print(repos_failed)
