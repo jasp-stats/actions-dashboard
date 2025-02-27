@@ -19,12 +19,15 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: r-lib/actions/setup-r@v2
       - uses: r-lib/actions/setup-pandoc@v2
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - uses: r-lib/actions/setup-r@v2
         with:
-          cache-version: 2
-          extra-packages: any::rmarkdown, local::.
+          r-version: renv
+      - uses: r-lib/actions/setup-renv@v2
+
+      - name: Install actionsDashboard
+        run: renv::install(".")
+        shell: Rscript {0}
 
       - name: Render Dashboard
         run: Rscript -e 'rmarkdown::render("vignettes/actions-dashboard.Rmd", rmarkdown::html_vignette(), "index.html")'

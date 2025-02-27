@@ -53,7 +53,7 @@ get_jasp_repos <- function() {
   repos <- repos[grepl("jasp[A-Z]", repos)]
 
   # some custom exclusions
-  repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults", "jaspCommon",
+  repos <- setdiff(repos, c("jaspTools", "jaspColumnEncoder", "jaspResults", "jaspCommon", "jaspModuleBundleManager", "jaspModuleTools",
                             "jaspPredictiveAnalytics", "jaspQMLComponents",
                             "jaspBase", "jaspGraphs", "jaspTestModule", "jaspModuleTemplate",
                             "jaspCommonLib", "jaspModuleInstaller", "jaspQMLControlsPlugin", "jaspIrtStanModels"))
