@@ -17,17 +17,21 @@ knitr::opts_chunk$set(
 ```{r setup, include=FALSE}
 library(actionsDashboard)
 repos <- get_jasp_repos()
-# messages <- capture.output({
+messages <- capture.output({
   tib_individual  <- try(get_action_data_as_tib(repos))
-# })
+})
 if (inherits(tib_individual, "try-error")) {
   print(messages)
-  stop("Failed to get action data", domain = NA)
+  print(tib_individual)
+  p_collapsed_runs <- repos_successful <- p_individual_runs <- NA
+  print("Failed to get action data")
+} else {
+  print("Successfully retrieved action data")
+  tib_collapsed     <- get_collapsed_tib(tib_individual)
+  p_collapsed_runs  <- plot_collapsed_runs(tib_collapsed)
+  repos_successful  <- repos[repos %in% tib_individual$repo]
+  p_individual_runs <- plot_individual_runs(repos_successful, tib_individual)
 }
-tib_collapsed     <- get_collapsed_tib(tib_individual)
-p_collapsed_runs  <- plot_collapsed_runs(tib_collapsed)
-repos_successful  <- repos[repos %in% tib_individual$repo]
-p_individual_runs <- plot_individual_runs(repos_successful, tib_individual)
 ```
 
 ## Aggregated runs per module
@@ -45,7 +49,7 @@ p_individual_runs
 ```{r}
 Sys.time()
 gh::gh_rate_limit()
-# print(messages)
+print(messages)
 print(repos_successful)
 repos_failed <- setdiff(repos, repos_successful)
 print(repos_failed)
