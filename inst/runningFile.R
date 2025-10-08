@@ -2,8 +2,11 @@ library(actionsDashboard)
 repos <- get_jasp_repos()
 tib_individual    <- get_action_data_as_tib(repos)
 tib_collapsed     <- get_collapsed_tib(tib_individual)
+p_collapsed_runs  <- plot_collapsed_runs(tib_collapsed)
 repos_successful  <- repos[repos %in% tib_individual$repo]
-p_collapsed_runs  <- plot_collapsed_runs(repos_successful, tib_collapsed)
+p_individual_runs <- plot_individual_runs(repos_successful, tib_individual)
+
+plot_collapsed_runs(tib_collapsed)
 debugonce(plot_individual_runs)
 p_individual_runs <- plot_individual_runs(repos_successful, tib_individual)
 

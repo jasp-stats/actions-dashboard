@@ -67,17 +67,21 @@ get_jasp_repos <- function() {
   return(repos)
 }
 
+on_ci <- function() {
+  identical(Sys.getenv("CI", "false"), "true")
+}
+
 #' @export
-get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identical(.Platform$OS.type, "unix")) {
+get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = TRUE) {
 
   tib_results <- tibble::tibble()
 
-  if (identical(Sys.getenv("CI", "false"), "true")) {
+  if (on_ci()) {
     cat("Running on CI, disabling cache\n")
     enable_cache <- FALSE
   }
 
-  cache_root <- file.path("~", ".cache", "R", "jaspActionsDashboard-cache")
+  cache_root <- rappdirs::user_cache_dir("jaspActionsDashboard-cache")
   if (enable_cache) {
     if (!dir.exists(cache_root))
       dir.create(cache_root, recursive = TRUE)
@@ -138,8 +142,9 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
     )
 
   oses      <- unique(gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\1", tib_results$name))
-  rversions <- unique(gsub("unit-tests / (.*)-latest \\(R (.*)\\)", "\\2", tib_results$name))
+  rversions <- unique(stringr::str_extract(tib_results$name, "(?<=\\(R )([0-9]+\\.[0-9]+\\.[0-9]+|release)"))
   oses <- c("windows", "macOS", "ubuntu")
+
 
   # rversions can have nonnumeric-values, e.g.,
   non_numeric_versions <- grep(x = rversions, pattern = "^[[:digit:]]+", invert = TRUE)
@@ -175,17 +180,44 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = identica
     }
 
     level_order <- intersect(level_order, name_clean)
-    tib_results$name_clean <- factor(name_clean, levels = rev(level_order))
+    all_levels <- unique(name_clean)
+
+    tib_results$name_clean <- factor(name_clean, levels = sort_levels(unique(name_clean)))
   } else {
 
     level_order <- intersect(level_order, tib_results$name_clean)
-    tib_results$name_clean <- factor(tib_results$name_clean, levels = rev(level_order))
+    tib_results$name_clean <- factor(tib_results$name_clean, levels = sort_levels(unique(tib_results$name_clean)))
 
   }
 
 
   return(tib_results)
 
+}
+
+sort_levels <- function(observed_levels) {
+
+  df <- tibble::tibble(run = observed_levels)
+
+  df_sorted <- df |>
+    dplyr::mutate(
+      # normalize OS name to lowercase for sorting
+      os = stringr::str_to_lower(stringr::str_extract(run, "windows|macos|ubuntu")),
+
+      # extract info type (lockfile, latest, or none)
+      info = dplyr::case_when(
+        stringr::str_detect(run, "lockfile") ~ "lockfile",
+        stringr::str_detect(run, "latest")   ~ "latest",
+        TRUE                                 ~ "none"
+      ),
+      # set factor levels for desired sort order
+      info = factor(info, levels = c("lockfile", "latest", "none")),
+      os = factor(os, levels = c("windows", "macos", "ubuntu"))
+    )  |>
+    dplyr::arrange(info, os) |>
+    dplyr::select(run)
+
+  return(rev(df_sorted[[1]]))
 }
 
 #' @export
