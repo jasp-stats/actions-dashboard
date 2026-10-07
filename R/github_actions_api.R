@@ -148,6 +148,7 @@ get_action_data_as_tib <- function(repos, force = FALSE, enable_cache = TRUE) {
 
   # rversions can have nonnumeric-values, e.g.,
   non_numeric_versions <- grep(x = rversions, pattern = "^[[:digit:]]+", invert = TRUE)
+  resolved_versions <- character()
   if (length(non_numeric_versions) > 0) {
 
     resolved_versions <- vapply(non_numeric_versions, \(v) {
