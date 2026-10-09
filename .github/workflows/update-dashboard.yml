@@ -15,7 +15,7 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -30,6 +30,12 @@ jobs:
 
       - name: Install actionsDashboard
         run: renv::install(".")
+        shell: Rscript {0}
+
+      - name: Run regression checks
+        run: |
+          source("tests/workflow-token.R")
+          source("tests/numeric-r-versions.R")
         shell: Rscript {0}
 
       - name: Render Dashboard

@@ -14,10 +14,13 @@ Imports:
     gh (>= 1.6.1),
     htmltools,
     htmlwidgets,
+    jsonlite,
     plotly,
     rappdirs,
+    rlang (>= 1.2.0),
     scales,
     stats,
+    stringr,
     tibble,
     vctrs
 RoxygenNote: 7.2.0
